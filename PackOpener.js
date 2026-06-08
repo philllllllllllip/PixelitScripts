@@ -82,6 +82,12 @@ async function bulkPromptAndOpenPack() {
       return;
     }
 
+    let tokensRes = await fetch("/api/loggedin", { credentials: "include" });
+    let tokensData = await tokensRes.json();
+    if (tokensData && tokensData.user && typeof tokensData.user.tokens === "number") {
+      window.userTokens = tokensData.user.tokens;
+    }
+
     const currentTokens = window.userTokens || 0;
     const maxAffordable = Math.floor(currentTokens / targetPack.cost);
     if (maxAffordable <= 0) {
