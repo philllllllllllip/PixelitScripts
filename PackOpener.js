@@ -78,20 +78,29 @@ async function bulkPromptAndOpenPack() {
     );
 
     if (!targetPack) {
-      console.error(`❌ Pack "${finalPackQuery}" could not be found.`);
+      console.error(`Pack "${finalPackQuery}" could not be found.`);
       return;
     }
 
+    let currentTokens = 0;
     let tokensRes = await fetch("/api/loggedin", { credentials: "include" });
     let tokensData = await tokensRes.json();
+    
     if (tokensData && tokensData.user && typeof tokensData.user.tokens === "number") {
-      window.userTokens = tokensData.user.tokens;
+      currentTokens = tokensData.user.tokens;
+      window.userTokens = currentTokens;
+    } else if (typeof window.userTokens === "number" && window.userTokens > 0) {
+      currentTokens = window.userTokens;
+    } else {
+      const sidebarTokens = document.querySelector('[class*="token"], [id*="token"]');
+      if (sidebarTokens) {
+        currentTokens = parseInt(sidebarTokens.innerText.replace(/,/g, ""), 10) || 0;
+      }
     }
 
-    const currentTokens = window.userTokens || 0;
     const maxAffordable = Math.floor(currentTokens / targetPack.cost);
     if (maxAffordable <= 0) {
-      console.warn(`⚠️ Insufficient tokens! You only have ${currentTokens}. ${targetPack.name} costs ${targetPack.cost}.`);
+      console.warn(`Insufficient tokens! You only have ${currentTokens}. ${targetPack.name} costs ${targetPack.cost}.`);
       return;
     }
 
@@ -108,7 +117,7 @@ async function bulkPromptAndOpenPack() {
     } else {
       amountToOpen = parseInt(countInput, 10);
       if (isNaN(amountToOpen) || amountToOpen <= 0) {
-        console.error("❌ Invalid quantity typed.");
+        console.error("Invalid quantity typed.");
         return;
       }
       if (amountToOpen > maxAffordable) {
@@ -117,7 +126,7 @@ async function bulkPromptAndOpenPack() {
     }
 
     console.clear();
-    console.log(`🚀 Starting open process for ${amountToOpen}x ${targetPack.name}...`);
+    console.log(`Starting open process for ${amountToOpen}x ${targetPack.name}...`);
     
     const summary = {};
     let totalSpent = 0;
@@ -125,8 +134,6 @@ async function bulkPromptAndOpenPack() {
     let consecutive429s = 0;
 
     for (let i = 0; i < amountToOpen; i++) {
-      if (window.userTokens < targetPack.cost) break;
-
       const openRes = await fetch(`/api/packs/open/${encodeURIComponent(targetPack.name)}`, {
         method: "POST",
         credentials: "include",
@@ -136,24 +143,25 @@ async function bulkPromptAndOpenPack() {
       if (openRes.status === 429) {
         consecutive429s++;
         if (consecutive429s > 3) {
-          console.error("❌ Server is strictly blocking requests. Halting loop.");
+          console.error("Server is strictly blocking requests. Halting loop.");
           break;
         }
-        console.warn(`⚠️ Hit a 429 Rate Limit. Cooling down for 5 seconds...`);
+        console.warn(`Hit a 429 Rate Limit. Cooling down for 5 seconds...`);
         await delay(5000);
         i--; 
         continue;
       }
 
       if (!openRes.ok) {
-        console.error(`❌ Stopped on pack #${i + 1}. Server Status: ${openRes.status}`);
+        console.error(`Stopped on pack #${i + 1}. Server Status: ${openRes.status}`);
         break;
       }
 
       consecutive429s = 0;
 
       const data = await openRes.json();
-      window.userTokens = data.tokens;
+      currentTokens = data.tokens ?? (currentTokens - targetPack.cost);
+      window.userTokens = currentTokens;
       totalSpent += targetPack.cost;
       successfulOpens++;
 
@@ -186,7 +194,7 @@ async function bulkPromptAndOpenPack() {
     );
     console.log(`Packs Opened:     ${successfulOpens} / ${amountToOpen}`);
     console.log(`Tokens Consumed:  ${totalSpent.toLocaleString()}`);
-    console.log(`Wallet Balance:   ${window.userTokens.toLocaleString()}`);
+    console.log(`Wallet Balance:   ${currentTokens.toLocaleString()}`);
     console.log("-----------------------------------------");
 
     for (const [name, info] of Object.entries(summary)) {
@@ -202,7 +210,7 @@ async function bulkPromptAndOpenPack() {
     console.log("=========================================");
 
   } catch (err) {
-    console.error("❌ Automation error:", err.message);
+    console.error("Automation error:", err.message);
   }
 }
 
